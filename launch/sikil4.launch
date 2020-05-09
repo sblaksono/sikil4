@@ -1,0 +1,12 @@
+<launch>
+    <node pkg="ros_mpu9250" name="ros_mpu9250_node" type="ros_mpu9250_node"/>
+    <node pkg="pwm_pca9685" name="pca9685_node" type="pca9685_node">
+        <rosparam param="device">/dev/i2c-1</rosparam>
+        <rosparam param="frequency">50</rosparam>
+        <rosparam param="timeout">[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]</rosparam>
+        <rosparam param="timeout_value">[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]</rosparam>
+        <rosparam param="pwm_min">[1800, 1800, 1800, 1800, 1800, 1800, 1800, 1800, 1800, 1800, 1800, 1800, 1800, 1800, 1800, 1800]</rosparam>
+        <rosparam param="pwm_max">[8700, 8700, 8700, 8700, 8700, 8700, 8700, 8700, 8700, 8700, 8700, 8700, 8700, 8700, 8700, 8700]</rosparam>
+    </node>
+
+</launch>
