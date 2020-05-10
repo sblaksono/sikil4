@@ -18,30 +18,31 @@ last_leg_pos = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]]
 leg_mirror = [1, 1, -1, -1]
 movement = [0, 0, 0]
 
-L = 8 #relative to last position
-walk_seq = [[[L, L, L, 2], [0, 0, 1, 1], [1, 1, 1, 1], [1, 1, 0, 1], [0, 0, 0, 1], [L, L, L, 4], [0, -1, 0, 1]], [[0, 0, 1, 1], [1, 1, 1, 1], [1, 1, 0, 1], [L, L, L, 2], [0, 0, 0, 1], [L, L, L, 4], [0, -1, 0, 1]], [[L, L, L, 4], [0, -1, 0, 1], [0, 0, 1, 1], [1, 1, 1, 1], [1, 1, 0, 1], [L, L, L, 2], [0, 0, 0, 1]], [[L, L, L, 4], [0, -1, 0, 1], [L, L, L, 2], [0, 0, 1, 1], [1, 1, 1, 1], [1, 1, 0, 1], [0, 0, 0, 1]]]
+L = 8 # keep last position
+walk_seq = [[[L, L, L, 3], [0, 0, 1, 1], [1, 1, 1, 1], [1, 1, 0, 5], [0, 0, 0, 2]], [[0, 0, 1, 1], [1, 1, 1, 1], [1, 1, 0, 2], [0, 0, 0, 6], [-1, -1, 0, 2]], [[L, L, L, 4], [-1, -1, 0, 5], [0, 0, 1, 1], [1, 1, 1, 1], [1, 1, 0, 1]], [[L, L, L, 4], [-1, -1, 0, 2], [0, 0, 1, 1], [1, 1, 1, 1], [1, 1, 0, 2], [0, 0, 0, 2]]]
+walk_prefix = [[], [], [[0, 0, 1], [0, 0, 0]], [[0, 0, 1], [0, 0, 0]]]
 
 def enqueue(queue, x, y, z, step):
-    #rospy.loginfo("%f %f %f %f", x, y, z, step)
     last_pos = queue[0]
     dx = x - last_pos[0]
     dy = y - last_pos[1]
     dz = z - last_pos[2]
+    #rospy.loginfo("%f %f %f", dx, dy, dz)
     if step == 0:
         d = math.sqrt((dx * dx) + (dy * dy) + (dz * dz))
         step = round(d / 0.01, 0)
+        if step == 0:
+            step = 1
 
     i = 1
-    while i < step:
+    while i <= step:
         pos = [0, 0, 0]
         pos[0] = last_pos[0] + ((i / step) * dx)
         pos[1] = last_pos[1] + ((i / step) * dy)
         pos[2] = last_pos[2] + ((i / step) * dz)
-        #rospy.loginfo("%f %f %f", pos[0], pos[1], pos[2])
         queue.insert(0, pos)
         i += 1
-    queue.insert(0, [x, y, z])
-    #rospy.loginfo("%f %f %f", x, y, z)
+        #rospy.loginfo("%f %f %f", pos[0], pos[1], pos[2])
 
 def dequeue(queue):
     pos = queue[len(queue) - 1]
@@ -90,8 +91,8 @@ def calc_servo():
         leg_pos = dequeue(leg_queue[i])
         last_leg_pos[i] = [leg_pos[0], leg_pos[1], leg_pos[2]]
 
-        x = (-body_pos[0] * leg_mirror[i]) + leg_pos[0]
-        y = -body_pos[1] + leg_pos[1] 
+        x = -body_pos[0] + leg_pos[0]
+        y = -body_pos[1] + leg_pos[1]
         z = body_pos[2] - leg_pos[2]
 
         n = math.sqrt((y * y) + (4 * z * z)) / 2
@@ -107,70 +108,78 @@ def calc_servo():
         set_servo((i * 3) + 2, rad180 - A)
 
 def reset_leg_queue():
+    global leg_queue
+    for i in range(4):
+        reset_queue(leg_queue[i], [0, 0, 0])
+    
+def cut_leg_queue():
     global leg_queue, last_leg_pos
     for i in range(4):
         reset_queue(leg_queue[i], last_leg_pos)
     
 def leg_requeue():
-    global movement, last_body_pos, leg_queue, last_leg_pos, walk_seq
-    e = 99
-    for i in range(4):
-        if e > len(leg_queue[i]):
-            e = len(leg_queue[i])
-    if e > 1:
-        return
-  
-    step = round(last_body_pos[2] / 0.05, 0)
-    reset_leg_queue()
-    for i in range(4):
-        if (movement[0] != 0 or movement[1] != 0) and movement[2] != 0:
+    global movement, leg_queue, last_leg_pos, walk_seq    
+    step = round(max(movement[0], movement[1], movement[2]) / 0.05, 0)
+    if (movement[0] != 0 or movement[1] != 0) and movement[2] != 0:
+        for i in range(4):
+            x = last_leg_pos[i][0]
+            y = last_leg_pos[i][1]
+            z = last_leg_pos[i][2]
             for j in range(len(walk_seq[i])):
                 seq = walk_seq[i][j]
                 for k in range(seq[3]):
-                    if seq[0] == L:
-                        x = last_leg_pos[i][0]
-                    else:
-                        x = seq[0] * last_body_pos[2] * movement[0]
-                    if seq[1] == L:
-                        y = last_leg_pos[i][1]
-                    else:
-                        y = seq[1] * last_body_pos[2] * movement[1]
-                    if seq[2] == L:
-                        z = last_leg_pos[i][2]
-                    else:
-                        z = seq[2] * last_body_pos[2] * movement[2]
+                    if seq[0] != L:
+                        x = seq[0] * movement[0] * leg_mirror[i]
+                    if seq[1] != L:
+                        y = seq[1] * movement[1]
+                    if seq[2] != L:
+                        z = seq[2] * movement[2]
                     enqueue(leg_queue[i], x, y, z, step)
+                    #rospy.loginfo("%d %f %f %f", i, x, y, z)
 
 def handle_task(task):
     global body_queue, leg_queue, movement
     if task.cmd == 'stand':
         enqueue(body_queue, task.x, task.y, task.z, 0)
+        movement = [movement[0], movement[1], task.z / 2]
         return True
     if task.cmd == 'sit':
+        movement = [0, 0, 0]
+        reset_leg_queue()
         enqueue(body_queue, 0, 0, 0, 0)
         return True
     if task.cmd == 'walk':
-        movement = [task.x, task.y, task.z]
-        reset_leg_queue()
+        enqueue(body_queue, 0, 0, task.z, 0)
+        movement = [task.x, task.y, task.z / 2]
+        cut_leg_queue()
+        if (movement[0] != 0 or movement[1] != 0) and movement[2] != 0:
+            for i in range(4):
+                for j in range(len(walk_prefix[i])):
+                    seq = walk_prefix[i][j]
+                    x = seq[0] * movement[0] * leg_mirror[i]
+                    y = seq[1] * movement[1]
+                    z = seq[2] * movement[2]
+                    enqueue(leg_queue[i], x, y, z, 0)
+        leg_requeue()
         return True
     if task.cmd == 'stop':
-        movement = [0, 0, 0]
-        reset_leg_queue()
+        movement = [0, 0, movement[2]]
+        cut_leg_queue()
         for i in range(4):
-            enqueue(leg_queue[i], 0, 0, 0.5, 0)
-            enqueue(leg_queue[i], 0, 0, 0, 0)
+            enqueue(leg_queue[i], leg_queue[i][0][0], leg_queue[i][0][1], 0, 0)
         return True
     return False
 
 def sikil4_node():
-    global pub
+    global pub, leg_queue
     rospy.init_node('sikil4')
     pub = rospy.Publisher('/command', Int32MultiArray, queue_size = 0)
     task = rospy.Service('sikil4/task', Task, handle_task)
 
-    rate = rospy.Rate(50)
+    rate = rospy.Rate(25)
     while not rospy.is_shutdown():
-        leg_requeue()
+        if len(leg_queue[0]) <= 1:
+            leg_requeue()
         calc_servo();
         move_servo();
         rate.sleep()
